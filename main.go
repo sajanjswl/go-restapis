@@ -1,113 +1,118 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"math/rand"
+	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
-
-	"encoding/json"
-	"log"
-	"net/http"
-
-	//"reflect"
-	"fmt"
 )
 
+// Book struct (Model)
 type Book struct {
-	ID     int    `jason:id`
-	Title  string `jason:title`
-	Author string `jason:author`
-	Year   string `jason:year`
+	ID     string  `json:"id"`
+	Isbn   string  `json:"isbn"`
+	Title  string  `json:"title"`
+	Author *Author `json:"author"`
 }
 
+// Author struct
+type Author struct {
+	Firstname string `json:"firstname"`
+	Lastname  string `json:"lastname"`
+}
+
+// Init books var as a slice Book struct
 var books []Book
 
-func main() {
-	fmt.Println("starting RestApi server !..")
-	router := mux.NewRouter()
-	books = append(books, Book{ID: 1, Title: "golang", Author: "Mr. Golang", Year: "2019"},
-		Book{ID: 2, Title: "Goroutines", Author: "Mr. Goroutine", Year: "2018"},
-		Book{ID: 3, Title: "Channel", Author: "Mr. Channel", Year: "2019"},
-		Book{ID: 4, Title: "Concourrency", Author: "Mr. Concurrency", Year: "2019"},
-	)
-
-	router.HandleFunc("/books", getBooks).Methods("GET")
-	router.HandleFunc("/books/{id}", getBook).Methods("GET")
-	router.HandleFunc("books", addBook).Methods("POST")
-	router.HandleFunc("/books", updateBook).Methods("PUT")
-	router.HandleFunc("/books/{id}", removeBook).Methods("DELETE")
-
-	log.Fatal(http.ListenAndServe(":8000", router))
-}
-
+// Get all books
 func getBooks(w http.ResponseWriter, r *http.Request) {
-
-	_ = json.NewEncoder(w).Encode(books)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(books)
 }
 
+// Get single book
 func getBook(w http.ResponseWriter, r *http.Request) {
-
-	params := mux.Vars(r)
-
-	//log.Println(params)
-
-	// reflect give us the type of data type
-	//fmt.Println(reflect.TypeOf(params["id"]))
-
-	i, _ := strconv.Atoi(params["id"])
-
-	//fmt.Println(reflect.TypeOf(i))
-
-	for _, book := range books {
-		if book.ID == i {
-			_ = json.NewEncoder(w).Encode(&book)
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r) // Gets params
+	// Loop through books and find one with the id from the params
+	for _, item := range books {
+		if item.ID == params["id"] {
+			json.NewEncoder(w).Encode(item)
+			return
 		}
 	}
+	json.NewEncoder(w).Encode(&Book{})
 }
 
-func addBook(w http.ResponseWriter, r *http.Request) {
-
+// Add new book
+func createBook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	var book Book
-
 	_ = json.NewDecoder(r.Body).Decode(&book)
-
+	book.ID = strconv.Itoa(rand.Intn(100000000)) // Mock ID - not safe
 	books = append(books, book)
-
-	_ = json.NewEncoder(w).Encode(books)
-
-	fmt.Println(book)
+	json.NewEncoder(w).Encode(book)
 }
 
+// Update book
 func updateBook(w http.ResponseWriter, r *http.Request) {
-
-	var book Book
-
-	_ = json.NewDecoder(r.Body).Decode(&book)
-
-	for i, item := range books {
-		if item.ID == book.ID {
-			books[i] = book
-		}
-
-	}
-
-	_ = json.NewEncoder(w).Encode(books)
-
-}
-
-func removeBook(w http.ResponseWriter, r *http.Request) {
-
+	w.Header().Set("Content-Type", "application/json")
 	params := mux.Vars(r)
-
-	id, _ := strconv.Atoi(params["id"])
-
-	//fmt.Println(reflect.TypeOf(i))
-
-	for i, item := range books {
-		if item.ID == id {
-			books = append(books[:i], books[i+1:]...)
+	for index, item := range books {
+		if item.ID == params["id"] {
+			books = append(books[:index], books[index+1:]...)
+			var book Book
+			_ = json.NewDecoder(r.Body).Decode(&book)
+			book.ID = params["id"]
+			books = append(books, book)
+			json.NewEncoder(w).Encode(book)
+			return
 		}
 	}
-
-	_ = json.NewEncoder(w).Encode(books)
 }
+
+// Delete book
+func deleteBook(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	params := mux.Vars(r)
+	for index, item := range books {
+		if item.ID == params["id"] {
+			books = append(books[:index], books[index+1:]...)
+			break
+		}
+	}
+	json.NewEncoder(w).Encode(books)
+}
+
+// Main function
+func main() {
+
+	fmt.Println("starting RestAPI server...")
+	// Init router
+	r := mux.NewRouter()
+
+	// Hardcoded data - @todo: add database
+	books = append(books, Book{ID: "1", Isbn: "438227", Title: "Book One", Author: &Author{Firstname: "John", Lastname: "Doe"}})
+	books = append(books, Book{ID: "2", Isbn: "454555", Title: "Book Two", Author: &Author{Firstname: "Steve", Lastname: "Smith"}})
+
+	// Route handles & endpoints
+	r.HandleFunc("/books", getBooks).Methods("GET")
+	r.HandleFunc("/books/{id}", getBook).Methods("GET")
+	r.HandleFunc("/books", createBook).Methods("POST")
+	r.HandleFunc("/books/{id}", updateBook).Methods("PUT")
+	r.HandleFunc("/books/{id}", deleteBook).Methods("DELETE")
+
+	// Start server
+	log.Fatal(http.ListenAndServe(":8000", r))
+}
+
+// Request sample
+// {
+// 	"isbn":"4545454",
+// 	"title":"Book Three",
+// 	"author":{"firstname":"Harry","lastname":"White"}
+// }
